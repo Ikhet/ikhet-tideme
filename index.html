@@ -201,6 +201,8 @@ body.diving #vignette{background:radial-gradient(110% 70% at 50% 30%,transparent
 <body>
 <canvas id="ocean"></canvas>
 <div id="vignette"></div>
+<!-- 海浪声走 <audio> 元素 = iOS 的"媒体"通道，侧边静音键关着也能响 -->
+<audio id="oceanEl" loop playsinline webkit-playsinline preload="none"></audio>
 
 <div id="app">
 <div class="screens">
@@ -296,6 +298,15 @@ body.diving #vignette{background:radial-gradient(110% 70% at 50% 30%,transparent
         并且从主屏幕图标打开（iOS 16.4 以上）。App 被系统完全清掉时不会响。
       </div>
       <button class="btn ghost wide" style="padding:10px;font-size:13px" id="notifyBtn">打开瓶子漂回的提醒</button>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="muted" style="margin-bottom:12px">
+        呼吸和下潜的浪声走的是媒体音量，侧边静音键关着也能响。
+        听不到就点下面试一下，然后用音量键调大。
+      </div>
+      <button class="btn ghost wide" style="padding:10px;font-size:13px" id="soundTest">试听海浪声</button>
+      <div class="muted" id="soundMsg" style="margin-top:10px;font-size:12px"></div>
     </div>
     <div style="height:40px"></div>
   </section>
@@ -873,9 +884,9 @@ $('#breathBtn').onclick = ()=> BREATH.running ? stopBreath() : startBreath();
 /* 浪声跟着呼吸走：吸气浪涌起（变亮变响），呼气浪退回（变闷变轻） */
 function applyBreathStep(word, dur){
   if (!A) return;
-  if (word === '吸'){ ramp(A.lp.frequency, 1150, dur*0.92); ramp(A.master.gain, 0.30, dur*0.92); }
-  else if (word === '呼'){ ramp(A.lp.frequency, 240, dur*0.95); ramp(A.master.gain, 0.05, dur*0.95); }
-  else { ramp(A.lp.frequency, 430, 0.8); ramp(A.master.gain, 0.12, 0.8); }   // 屏息：低而稳
+  if (word === '吸'){ ramp(A.lp.frequency, 1150, dur*0.92); ramp(A.master.gain, 0.50, dur*0.92); }
+  else if (word === '呼'){ ramp(A.lp.frequency, 240, dur*0.95); ramp(A.master.gain, 0.07, dur*0.95); }
+  else { ramp(A.lp.frequency, 430, 0.8); ramp(A.master.gain, 0.20, 0.8); }   // 屏息：低而稳
 }
 function startBreath(){
   BREATH.running = true; BREATH.step = 0; BREATH.cycles = 0; BREATH.t0 = performance.now();
@@ -883,7 +894,7 @@ function startBreath(){
   chips.style.transition = 'opacity 1s'; chips.style.opacity = '0'; chips.style.pointerEvents = 'none';
   if (buildAudio()){
     ramp(A.lfoGain.gain, 0, 0.1); ramp(A.swellGain.gain, 0, 0.1);
-    ramp(A.master.gain, 0.05, 1.2);
+    ramp(A.master.gain, 0.07, 1.2);
   }
   const [w0, d0] = PATTERNS[pattern].seq[0];
   applyBreathStep(w0, d0);
@@ -1138,42 +1149,78 @@ $('#diveBtn').onclick = ()=> DIVE.running ? stopDive() : startDive();
    海浪声：粉噪 → 高通 → 低通 → 音量
    下潜用慢 LFO 自己涌；呼吸时由呼吸节律直接推滤波和音量
    ========================================================= */
-let AC = null, A = null;
+let AC = null, A = null, GRAPH = null, oceanEl = null, OCEAN_URL = null;
+
+/* 把粉噪渲染成一段无缝循环的 WAV。
+   关键：用 <audio> 元素播放它，iOS 才会当成"媒体"而不是"铃声"——
+   否则侧边静音键一拨，Web Audio 直接哑掉。 */
+function oceanWavURL(){
+  if (OCEAN_URL) return OCEAN_URL;
+  const SR = 22050, SEC = 12, N = SR*SEC, XF = (SR*1.5)|0;
+  const raw = new Float32Array(N + XF);
+  let last = 0;
+  for (let i=0;i<raw.length;i++){                 // 粉噪近似，比白噪柔和
+    const white = Math.random()*2-1;
+    last = (last + 0.02*white) / 1.02;
+    raw[i] = last * 3.2;
+  }
+  const out = raw.slice(0, N);
+  for (let i=0;i<XF;i++){                         // 把多出的尾巴交叉混回开头 → 循环无缝
+    const t = i/XF;
+    out[i] = raw[i]*t + raw[N+i]*(1-t);
+  }
+  let peak = 0;
+  for (let i=0;i<N;i++) peak = Math.max(peak, Math.abs(out[i]));
+  const norm = peak > 0 ? 0.9/peak : 1;
+
+  const bytes = 44 + N*2, buf = new ArrayBuffer(bytes), v = new DataView(buf);
+  const str = (o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  str(0,'RIFF'); v.setUint32(4, bytes-8, true); str(8,'WAVE'); str(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,SR,true); v.setUint32(28,SR*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+  str(36,'data'); v.setUint32(40, N*2, true);
+  for (let i=0;i<N;i++){
+    const s = Math.max(-1, Math.min(1, out[i]*norm));
+    v.setInt16(44+i*2, s*32767, true);
+  }
+  OCEAN_URL = URL.createObjectURL(new Blob([buf], {type:'audio/wav'}));
+  return OCEAN_URL;
+}
+
+// 只能建一次图（createMediaElementSource 对同一个元素只允许调用一次）
 function buildAudio(){
-  if (A) return A;
   try{
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    if (AC.state === 'suspended') AC.resume();
-    const len = AC.sampleRate * 4;
-    const buf = AC.createBuffer(1, len, AC.sampleRate);
-    const ch = buf.getChannelData(0);
-    let last = 0;
-    for (let i=0;i<len;i++){                      // 粉噪近似，比白噪柔和
-      const white = Math.random()*2-1;
-      last = (last + 0.02*white) / 1.02;
-      ch[i] = last * 3.2;
+    if (!GRAPH){
+      oceanEl = $('#oceanEl');
+      if (!oceanEl.src) oceanEl.src = oceanWavURL();
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      const src = AC.createMediaElementSource(oceanEl);
+      const hp = AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 90;
+      const lp = AC.createBiquadFilter(); lp.type='lowpass';  lp.frequency.value = 420; lp.Q.value = 0.7;
+
+      const lfo = AC.createOscillator();  lfo.frequency.value = 0.085;   // ~12 秒一次涌浪
+      const lfoGain = AC.createGain();    lfoGain.gain.value = 0;
+      lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
+
+      const swell = AC.createOscillator(); swell.frequency.value = 0.085;
+      const swellGain = AC.createGain();   swellGain.gain.value = 0;
+      const master = AC.createGain();      master.gain.value = 0.0001;
+      swell.connect(swellGain); swellGain.connect(master.gain);
+
+      src.connect(hp); hp.connect(lp); lp.connect(master); master.connect(AC.destination);
+      lfo.start(); swell.start();
+      GRAPH = { lp, master, lfoGain, swellGain };
     }
-    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
-    const hp = AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 90;
-    const lp = AC.createBiquadFilter(); lp.type='lowpass';  lp.frequency.value = 420; lp.Q.value = 0.7;
-
-    const lfo = AC.createOscillator();  lfo.frequency.value = 0.085;   // ~12 秒一次涌浪
-    const lfoGain = AC.createGain();    lfoGain.gain.value = 0;
-    lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
-
-    const swell = AC.createOscillator(); swell.frequency.value = 0.085;
-    const swellGain = AC.createGain();   swellGain.gain.value = 0;
-    const master = AC.createGain();      master.gain.value = 0.0001;
-    swell.connect(swellGain); swellGain.connect(master.gain);
-
-    src.connect(hp); hp.connect(lp); lp.connect(master); master.connect(AC.destination);
-    src.start(); lfo.start(); swell.start();
-    A = { src, lp, master, lfoGain, swellGain };
-  }catch(e){ A = null; }
-  return A;
+    if (AC.state === 'suspended') AC.resume();
+    const p = oceanEl.play();
+    if (p && p.catch) p.catch(()=>{});
+    A = GRAPH;
+    ramp(GRAPH.master.gain, 0.0001, 0.02);
+    return A;
+  }catch(e){ A = null; return null; }
 }
 function ramp(param, value, seconds){
-  if (!A) return;
+  if (!AC) return;
   try{
     const t = AC.currentTime;
     param.cancelScheduledValues(t);
@@ -1183,15 +1230,11 @@ function ramp(param, value, seconds){
 }
 function stopAudio(fade = 1.2){
   if (!A) return;
-  const n = A; A = null;
-  try{
-    const t = AC.currentTime;
-    n.master.gain.cancelScheduledValues(t);
-    n.master.gain.setValueAtTime(n.master.gain.value, t);
-    n.master.gain.linearRampToValueAtTime(0.0001, t + fade);
-    setTimeout(()=>{ try{ n.src.stop(); }catch(e){} }, fade*1000 + 200);
-  }catch(e){}
+  const g = A; A = null;
+  ramp(g.master.gain, 0.0001, fade);
+  setTimeout(()=>{ if (!A && oceanEl) { try{ oceanEl.pause(); }catch(e){} } }, fade*1000 + 200);
 }
+function audioReady(){ return !!A; }
 
 function startDive(){
   DIVE.running = true; DIVE.t0 = performance.now(); DIVE.fading = false;
@@ -1203,9 +1246,9 @@ function startDive(){
   dchips.style.pointerEvents = 'none';
   if (buildAudio()){                     // 涌浪自己来回
     ramp(A.lfoGain.gain,   330,  4);
-    ramp(A.swellGain.gain, 0.10, 4);
+    ramp(A.swellGain.gain, 0.14, 4);
     ramp(A.lp.frequency,   520,  4);
-    ramp(A.master.gain,    0.26, 6);
+    ramp(A.master.gain,    0.42, 6);
   }
   tickDive();
   const rec = store.get('dives', []); rec.push({at:Date.now(), min:diveMin}); store.set('dives', rec);
@@ -1453,6 +1496,17 @@ $('#obNext').onclick = ()=>{
   OB.i++; paintOb();
 };
 $('#obSkip').onclick = endOnboard;
+
+let soundTestTimer = null;
+$('#soundTest').onclick = ()=>{
+  clearTimeout(soundTestTimer);
+  const msg = $('#soundMsg');
+  if (!buildAudio()){ msg.textContent = '这台设备没法播放声音。'; return; }
+  ramp(A.lfoGain.gain, 300, 2); ramp(A.swellGain.gain, 0.14, 2);
+  ramp(A.lp.frequency, 620, 2); ramp(A.master.gain, 0.45, 1.5);
+  msg.textContent = '正在放……听不到就按音量上键。';
+  soundTestTimer = setTimeout(()=>{ stopAudio(1.5); msg.textContent = ''; }, 6000);
+};
 
 $('#notifyBtn').onclick = async ()=>{
   await askNotify();

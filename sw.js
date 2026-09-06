@@ -1,5 +1,7 @@
-/* 潮汐 · service worker —— 装完就能离线用 */
-const CACHE = 'tide-v4';
+/* 潮汐 · service worker
+   缓存优先：装过一次之后，即使完全连不上网（或者域名被墙）也能秒开。
+   同时在后台悄悄拉新版本，下次打开就是新的。 */
+const CACHE = 'tide-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -31,16 +33,26 @@ self.addEventListener('notificationclick', e => {
   );
 });
 
-// 网络优先、失败回缓存：改了代码刷新就能看到新版，断网也能开
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+
+  // 只管自己家的文件；DeepSeek 之类的外部请求原样放行
+  let url;
+  try { url = new URL(e.request.url); } catch (err) { return; }
+  if (url.origin !== self.location.origin) return;
+
   e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+    caches.match(e.request).then(cached => {
+      const fresh = fetch(e.request).then(res => {
+        if (res && res.ok){
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        }
         return res;
-      })
-      .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
+      }).catch(() => cached || caches.match('./index.html'));
+
+      // 有缓存就立刻给缓存（不等网络），同时让 fresh 在后台更新缓存
+      return cached || fresh;
+    })
   );
 });
