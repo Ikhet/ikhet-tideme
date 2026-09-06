@@ -1,0 +1,1493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="潮汐">
+<meta name="theme-color" content="#050e1a">
+<title>潮汐</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+:root{
+  --abyss:#050e1a; --ink:#050b14;
+  --deep1:#07182a; --deep2:#0b2a44; --deep3:#0f4363;
+  --glow:#7fd4d9; --glow-dim:#3d8a97;
+  --moon:#eef2e9; --sand:#ded7c4;
+  --coral:#e0a396;
+  --fg:rgba(233,240,246,.93); --fg2:rgba(233,240,246,.62); --fg3:rgba(233,240,246,.38);
+  --line:rgba(160,205,220,.16);
+  --tab:78px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:#050e1a;overscroll-behavior:none}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  color:var(--fg);
+  -webkit-font-smoothing:antialiased;
+  touch-action:manipulation;
+  user-select:none;-webkit-user-select:none;
+}
+.serif{font-family:"Songti SC","Source Han Serif SC","Noto Serif CJK SC",Georgia,serif}
+
+#ocean{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+#vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(120% 80% at 50% 40%,transparent 40%,rgba(2,6,12,.55) 100%)}
+
+#app{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column}
+.screens{flex:1;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;
+  padding:calc(env(safe-area-inset-top) + 18px) 22px 0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.screen.on{display:flex;animation:fade .5s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------- tab bar ---------- */
+#tabbar{
+  position:relative;z-index:3;display:flex;
+  padding:8px 6px calc(env(safe-area-inset-bottom) + 8px);
+  background:linear-gradient(to top,rgba(4,10,20,.92),rgba(4,10,20,.55) 60%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+#tabbar button{
+  flex:1;background:none;border:0;color:var(--fg3);font:inherit;font-size:10.5px;letter-spacing:.14em;
+  display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px 0;cursor:pointer;
+  transition:color .35s}
+#tabbar button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.35;
+  stroke-linecap:round;stroke-linejoin:round}
+#tabbar button.on{color:var(--glow)}
+
+/* ---------- shared bits ---------- */
+.eyebrow{font-size:11px;letter-spacing:.34em;color:var(--fg3);text-transform:uppercase}
+.h1{font-size:26px;letter-spacing:.06em;margin:6px 0 0;font-weight:400}
+.muted{color:var(--fg2);font-size:13.5px;line-height:1.75}
+.card{background:rgba(12,32,52,.42);border:1px solid var(--line);border-radius:18px;padding:16px 18px;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.btn{
+  appearance:none;border:1px solid rgba(127,212,217,.34);background:rgba(15,67,99,.34);
+  color:var(--fg);font:inherit;font-size:14.5px;letter-spacing:.14em;
+  padding:13px 28px;border-radius:999px;cursor:pointer;transition:.3s;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.btn:active{transform:scale(.97);background:rgba(20,90,130,.5)}
+.btn.ghost{border-color:var(--line);background:transparent;color:var(--fg2)}
+.btn.wide{width:100%}
+.row{display:flex;gap:10px}
+.spacer{flex:1;min-height:12px}
+
+/* ---------- surface ---------- */
+[hidden]{display:none!important}
+#s-surface .moonline{display:flex;align-items:center;gap:10px;margin-top:14px;cursor:pointer;
+  align-self:flex-start;padding-right:4px}
+#moonGlyph{width:26px;height:26px;flex:none}
+.caret{width:12px;height:12px;stroke:var(--fg3);fill:none;stroke-width:1.4;stroke-linecap:round;
+  stroke-linejoin:round;margin-left:2px;margin-top:4px;transition:transform .35s}
+.moonline.open .caret{transform:rotate(180deg)}
+.ritual{margin-top:12px;font-size:13.5px;line-height:1.95;color:var(--fg2);animation:fade .45s ease}
+.ritual-tag{font-size:10.5px;letter-spacing:.22em;color:var(--glow);margin-bottom:9px}
+#affirm{font-size:13px;line-height:1.9;letter-spacing:.06em;color:var(--fg2);
+  text-align:center;margin-top:14px;opacity:.82}
+#affirm::before{content:'◦　';color:var(--glow-dim)}
+#recordBtn.locked{border-color:var(--line);color:var(--fg2);background:transparent}
+#s-surface .readout{position:absolute;left:0;right:0;text-align:center;top:38%;
+  pointer-events:none;transition:opacity .4s;
+  text-shadow:0 2px 22px rgba(2,10,20,.75)}
+#levelNum{font-size:58px;font-weight:200;letter-spacing:.02em;line-height:1}
+#levelName{font-size:15px;letter-spacing:.4em;color:var(--glow);margin-top:10px}
+#dragHint{font-size:11.5px;letter-spacing:.24em;color:var(--fg3);margin-top:26px}
+#s-surface .bottomkit{position:absolute;left:22px;right:22px;bottom:14px}
+#phrase{font-size:16px;line-height:2;letter-spacing:.05em;text-align:center;
+  color:var(--fg);min-height:64px;display:flex;align-items:center;justify-content:center;padding:0 6px}
+#returnNote{margin-top:20px;animation:fade .5s ease}
+#returnNote.waiting{border-style:dashed;background:transparent;text-align:center}
+
+/* ---------- breath ---------- */
+#s-breath{align-items:center;text-align:center}
+#breathWord{font-size:34px;letter-spacing:.5em;text-indent:.5em;font-weight:200;
+  margin-top:34vh;transition:opacity .5s}
+#breathCount{font-size:12px;letter-spacing:.3em;color:var(--fg3);margin-top:18px}
+.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.chip{border:1px solid var(--line);background:rgba(10,28,46,.4);border-radius:999px;
+  padding:9px 16px;font-size:12.5px;letter-spacing:.1em;color:var(--fg2);cursor:pointer;transition:.3s}
+.chip.on{border-color:rgba(127,212,217,.5);color:var(--glow);background:rgba(15,67,99,.4)}
+
+/* ---------- bottle ---------- */
+#bottleText{
+  width:100%;min-height:190px;background:rgba(8,24,40,.5);border:1px solid var(--line);
+  border-radius:16px;color:var(--fg);font:inherit;font-size:15.5px;line-height:1.95;
+  padding:16px;resize:none;outline:none;letter-spacing:.03em;user-select:text;-webkit-user-select:text}
+#bottleText::placeholder{color:var(--fg3)}
+/* ---------- 投海场景 ---------- */
+#launch{position:fixed;inset:0;z-index:20;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;
+  background:radial-gradient(120% 60% at 50% 50%,rgba(3,10,18,.55),rgba(3,10,18,.85))}
+#launch.on{display:flex;animation:fade 1s ease}
+body.launching #app{opacity:0;pointer-events:none;transition:opacity .8s}
+body.launching #vignette{opacity:0;transition:opacity .8s}
+#launchText{font-size:20px;letter-spacing:.32em;text-indent:.32em;color:var(--fg);
+  transition:opacity .9s}
+#launchSub{font-size:11.5px;letter-spacing:.28em;color:var(--fg3);transition:opacity .9s}
+
+/* ---------- 新手引导 ---------- */
+#onboard{position:fixed;inset:0;z-index:30;display:none;flex-direction:column;
+  justify-content:space-between;
+  padding:calc(env(safe-area-inset-top) + 40px) 30px calc(env(safe-area-inset-bottom) + 34px);
+  background:linear-gradient(180deg,rgba(3,8,16,.94) 0%,rgba(5,16,28,.86) 45%,rgba(6,26,42,.78) 100%)}
+#onboard.on{display:flex}
+#onboard.pass{background:linear-gradient(180deg,rgba(3,8,16,.9) 0%,rgba(4,12,22,.35) 34%,rgba(4,12,22,0) 52%);
+  pointer-events:none}
+#onboard.pass #obFoot,#onboard.pass #obBody{pointer-events:auto}
+#obBody{flex:1;display:flex;flex-direction:column;justify-content:center;max-width:20em}
+#obTitle{font-size:29px;line-height:1.5;letter-spacing:.05em;transition:opacity .6s}
+#obText{font-size:15px;line-height:2.1;color:var(--fg2);margin-top:18px;
+  letter-spacing:.04em;transition:opacity .6s}
+#onboard.pass #obBody{flex:none;margin-top:2px}
+#onboard.pass #obTitle{font-size:22px}
+#onboard.pass #obNext{border-color:transparent;background:none;color:var(--fg3);
+  font-size:12px;letter-spacing:.26em;animation:pulse 2.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.85}}
+/* 引导要你拖海面的那一步：把界面其他东西压下去，只留水位 */
+body.obdrag .bottomkit,body.obdrag #tabbar,body.obdrag #s-surface .eyebrow,
+body.obdrag #s-surface .moonline{opacity:.05;pointer-events:none;transition:opacity .6s}
+#obFoot{display:flex;flex-direction:column;align-items:center;gap:14px}
+#obDots{display:flex;gap:7px}
+#obDots i{width:5px;height:5px;border-radius:99px;background:rgba(200,230,235,.22);transition:.4s}
+#obDots i.on{background:var(--glow);width:16px}
+#obNext{min-width:190px}
+.linkbtn{background:none;border:0;color:var(--fg3);font:inherit;font-size:12px;
+  letter-spacing:.18em;padding:8px;cursor:pointer;width:100%;text-align:center}
+
+/* ---------- 设置 ---------- */
+#keyInput{width:100%;background:rgba(6,20,34,.7);border:1px solid var(--line);border-radius:12px;
+  color:var(--fg);font:inherit;font-size:14px;padding:12px 14px;outline:none;letter-spacing:.04em;
+  user-select:text;-webkit-user-select:text}
+#keyInput::placeholder{color:var(--fg3)}
+
+/* ---------- dive ---------- */
+#s-dive{align-items:center;text-align:center}
+#depthNum{font-size:66px;font-weight:100;letter-spacing:.02em;line-height:1;margin-top:26vh}
+#depthNum small{font-size:17px;letter-spacing:.2em;color:var(--fg3);margin-left:6px}
+#diveLine{font-size:15px;line-height:2.1;letter-spacing:.08em;color:var(--fg2);
+  margin-top:34px;min-height:66px;max-width:19em;transition:opacity 1.6s}
+#diveCtl{margin-top:auto;margin-bottom:20px;width:100%}
+body.diving #tabbar{opacity:.12;transition:opacity 2s}
+body.diving #vignette{background:radial-gradient(110% 70% at 50% 30%,transparent 12%,rgba(0,2,6,.86) 100%)}
+
+/* ---------- my sea ---------- */
+#tideChart{width:100%;height:170px;display:block;margin:14px 0 4px}
+.legend{display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.16em;color:var(--fg3)}
+.bottleItem{display:flex;align-items:flex-start;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}
+.bottleItem svg{margin-top:1px}
+.bottleItem svg{width:20px;height:20px;stroke:var(--glow-dim);fill:none;stroke-width:1.3;flex:none}
+.bottleItem.back svg{stroke:var(--coral)}
+.bottleItem .meta{font-size:12.5px;letter-spacing:.08em;color:var(--fg3)}
+.bottleItem .body{font-size:14px;line-height:1.8;color:var(--fg2);margin-top:5px;
+  user-select:text;-webkit-user-select:text}
+.bottleItem{cursor:pointer}
+.bottleItem > div{flex:1;min-width:0}
+.reply{font-size:14px;line-height:2;color:var(--fg);margin-top:6px;
+  padding-left:12px;border-left:2px solid rgba(224,163,150,.45);
+  font-family:"Songti SC","Source Han Serif SC",Georgia,serif;
+  user-select:text;-webkit-user-select:text;animation:fade .4s ease}
+.who{font-size:10.5px;letter-spacing:.24em;color:var(--coral);
+  opacity:.8;margin-top:14px;margin-bottom:2px}
+#statRow{display:flex;gap:12px;margin-top:16px}
+#statRow .card{flex:1;text-align:center;padding:14px 8px}
+#statRow b{display:block;font-size:24px;font-weight:300;letter-spacing:.02em}
+#statRow span{font-size:10.5px;letter-spacing:.2em;color:var(--fg3)}
+</style>
+</head>
+<body>
+<canvas id="ocean"></canvas>
+<div id="vignette"></div>
+
+<div id="app">
+<div class="screens">
+
+  <!-- ============ 海面 ============ -->
+  <section id="s-surface" class="screen on">
+    <div class="eyebrow" id="todayLabel">—</div>
+    <div class="moonline" id="moonBtn">
+      <svg id="moonGlyph" viewBox="0 0 40 40"></svg>
+      <div class="h1 serif" id="moonName">—</div>
+      <svg class="caret" viewBox="0 0 12 12"><path d="M2.5 4.5 6 8 9.5 4.5"/></svg>
+    </div>
+    <div class="card ritual" id="ritual" hidden></div>
+    <div class="readout" id="readout">
+      <div id="levelNum">—</div>
+      <div id="levelName">　</div>
+      <div id="dragHint">上下拖动海面</div>
+    </div>
+    <div class="bottomkit">
+      <div id="phrase" class="serif"></div>
+      <button class="btn wide" id="recordBtn">记录今天的水位</button>
+      <button class="linkbtn" id="unlockBtn" hidden>记错了？改一下</button>
+      <div id="affirm" class="serif">—</div>
+    </div>
+  </section>
+
+  <!-- ============ 呼吸 ============ -->
+  <section id="s-breath" class="screen">
+    <div class="eyebrow">浪 的 呼 吸</div>
+    <div id="breathWord" class="serif">准备</div>
+    <div id="breathCount">选一种节律，跟着海面起落</div>
+    <div class="spacer"></div>
+    <div class="chips" id="breathChips"></div>
+    <button class="btn wide" id="breathBtn" style="margin:16px 0 20px">开始</button>
+  </section>
+
+  <!-- ============ 漂流瓶 ============ -->
+  <section id="s-bottle" class="screen">
+    <div class="eyebrow">漂 流 瓶</div>
+    <div class="h1 serif">写下来，然后扔进海里</div>
+    <div class="muted" style="margin:10px 0 16px">
+      封瓶之后你就看不到它了。过一会儿它会漂回岸边，带着海里那个人的回音。
+    </div>
+    <textarea id="bottleText" placeholder="此刻卡住你的是什么……"></textarea>
+    <button class="btn wide" id="sealBtn" style="margin:16px 0 6px">封 瓶 · 投 海</button>
+    <div class="muted" id="bottleHint" style="text-align:center;font-size:11.5px"></div>
+    <div class="card" id="returnNote" hidden></div>
+    <div style="height:24px"></div>
+  </section>
+
+  <!-- ============ 下潜 ============ -->
+  <section id="s-dive" class="screen">
+    <div class="eyebrow" id="diveEyebrow">下 潜</div>
+    <div id="depthNum">0<small>m</small></div>
+    <div id="diveLine" class="serif">水面还在你上方。</div>
+    <div id="diveCtl">
+      <div class="chips" id="diveChips"></div>
+      <button class="btn wide" id="diveBtn" style="margin-top:16px">开始下潜</button>
+      <div class="muted" style="text-align:center;margin-top:10px;font-size:11.5px">
+        建议音量调小，手机放在一旁，让屏幕自己暗下去
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 我的海 ============ -->
+  <section id="s-mysea" class="screen">
+    <div class="eyebrow">我 的 海</div>
+    <div class="h1 serif">这个月的潮汐</div>
+    <canvas id="tideChart"></canvas>
+    <div class="legend"><span id="chartFrom">—</span><span id="chartTo">—</span></div>
+    <div id="statRow"></div>
+    <div class="eyebrow" style="margin:30px 0 4px">瓶 子</div>
+    <div id="bottleList"></div>
+
+    <div class="eyebrow" style="margin:34px 0 10px">设 置</div>
+    <div class="card">
+      <div class="muted" style="margin-bottom:12px">
+        填入 DeepSeek 的 API key，瓶子漂回来时会带上一段人鱼写的回音。
+        key 只存在这台手机上，不会上传到任何地方。留空则用内置的回音。
+      </div>
+      <input id="keyInput" type="password" placeholder="sk-..." autocomplete="off"
+             autocapitalize="off" autocorrect="off" spellcheck="false">
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" style="flex:1;padding:10px;font-size:13px" id="keySave">保存</button>
+        <button class="btn ghost" style="flex:1;padding:10px;font-size:13px" id="keyTest">测试连接</button>
+      </div>
+      <div class="muted" id="keyMsg" style="margin-top:10px;font-size:12px"></div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="muted" style="margin-bottom:12px">
+        瓶子漂回来的时候提醒你一下。需要先把「潮汐」添加到主屏幕，
+        并且从主屏幕图标打开（iOS 16.4 以上）。App 被系统完全清掉时不会响。
+      </div>
+      <button class="btn ghost wide" style="padding:10px;font-size:13px" id="notifyBtn">打开瓶子漂回的提醒</button>
+    </div>
+    <div style="height:40px"></div>
+  </section>
+
+</div>
+
+<nav id="tabbar"></nav>
+</div>
+
+<!-- 投海：独立全屏场景 -->
+<div id="launch">
+  <div id="launchText" class="serif">瓶子已经离岸</div>
+  <div id="launchSub">看着它走</div>
+</div>
+
+<!-- 新手引导 -->
+<div id="onboard">
+  <div id="obBody">
+    <div id="obTitle" class="serif">这是一片海</div>
+    <div id="obText"></div>
+  </div>
+  <div id="obFoot">
+    <div id="obDots"></div>
+    <button class="btn" id="obNext">往下</button>
+    <button class="linkbtn" id="obSkip">跳过</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   潮汐 Tide — v1
+   一片海贯穿全部页面：canvas 是唯一的背景，各页面只改变它的状态。
+   ========================================================= */
+
+/* ---------- 存储：localStorage 不可用时自动降级到内存 ---------- */
+const _mem = {};
+const store = {
+  get(k, d){
+    if (k in _mem) return _mem[k];
+    try { const v = localStorage.getItem('tide:'+k);
+          if (v !== null){ _mem[k] = JSON.parse(v); return _mem[k]; } } catch(e){}
+    return d;
+  },
+  set(k, v){
+    _mem[k] = v;
+    try { localStorage.setItem('tide:'+k, JSON.stringify(v)); } catch(e){}
+  }
+};
+
+/* ---------- 工具 ---------- */
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp = (a,b,t) => a+(b-a)*t;
+const todayKey = (d=new Date()) =>
+  d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const DAY = 86400000;
+
+/* ---------- 月相 ---------- */
+function moonPhase(date=new Date()){
+  const ref = Date.UTC(2000,0,6,18,14,0);       // 一次已知的新月
+  const syn = 29.530588853 * DAY;
+  let p = ((date.getTime() - ref) % syn) / syn;
+  return p < 0 ? p+1 : p;                        // 0 新月 · 0.5 满月
+}
+const MOON_NAMES = ['新月','蛾眉月','上弦月','盈凸月','满月','亏凸月','下弦月','残月'];
+/* 每个月相配一件具体可做的水系魔法（water witchcraft）行为 */
+const MOON_RITUAL = {
+  '新月': { en:'NEW MOON', key:'设念',
+    do:'朔日，天上没有月亮，也叫 dark moon 的正中。倒一杯干净的水，对着它说出一件你想要的事——要说得像已经发生了。放在窗台过一夜，第二天早上喝掉，或者浇给植物。' },
+  '蛾眉月': { en:'WAXING CRESCENT', key:'吸引',
+    do:'收一点水（雨水最好，自来水也行）装进小瓶，贴一张纸条写上你想吸引的那个词。放在能看见月亮的地方，一直放到满月。' },
+  '上弦月': { en:'FIRST QUARTER', key:'推动',
+    do:'今天洗澡的时候，想象水流是从背后推你的力，把挡路的东西往下冲。出来后别急着擦干，让它自己蒸发一会儿。' },
+  '盈凸月': { en:'WAXING GIBBOUS', key:'调整',
+    do:'把要在满月充能的东西先洗干净——水晶、戒指、常用的杯子。用清水冲三遍，边冲边想着把别人的情绪从上面冲掉。' },
+  '满月': { en:'FULL MOON', key:'充能',
+    do:'做月光水：一瓶清水放在能照到月光的窗台或阳台，日出前收起来。之后一周用它泡茶、洗脸、或者浇最在意的那盆植物。' },
+  '亏凸月': { en:'WANING GIBBOUS', key:'致谢',
+    do:'倒一杯水，说三件这个月对你好的事——可以很小。说完把水倒进土里或者花盆里，还给它。' },
+  '下弦月': { en:'LAST QUARTER', key:'切断',
+    do:'海盐化进温水，洗手洗脚。冲的时候在心里点名一件要放掉的事，看着水从指缝走掉。水别留，直接倒掉。' },
+  '残月': { en:'WANING CRESCENT', key:'清理',
+    do:'月亮只剩一道细边，往下就是 dark moon 那几天。能量清理的时候：用盐水擦一遍门口和书桌，把不属于这里的东西擦掉。做完什么都别做，也别许愿——这几天是留白，早点睡。' }
+};
+function moonNameOf(p){ return MOON_NAMES[Math.floor(p*8 + 0.5) % 8]; }
+
+function drawMoonGlyph(svg, p){
+  // 用两条弧近似月牙
+  const r = 15, cx = 20, cy = 20;
+  const k = Math.cos(p * Math.PI * 2);           // 1 新月 → -1 满月
+  const sweepA = p < 0.5 ? 1 : 0;            // 盈：右半边亮
+  const sweepB = k > 0 ? 1 - sweepA : sweepA; // 不足半轮时终止线贴着亮的那一侧
+  const rx = Math.abs(k) * r;
+  svg.innerHTML =
+    `<defs><radialGradient id="mg" cx="35%" cy="30%">
+       <stop offset="0" stop-color="#f6f7ef"/><stop offset="1" stop-color="#c9d3cd"/>
+     </radialGradient></defs>
+     <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(200,220,225,.22)" stroke-width="1"/>
+     <path d="M ${cx} ${cy-r}
+              A ${r} ${r} 0 0 ${sweepA} ${cx} ${cy+r}
+              A ${rx} ${r} 0 0 ${sweepB} ${cx} ${cy-r} Z"
+           fill="url(#mg)" opacity=".95"/>`;
+}
+
+/* ---------- 文案 ---------- */
+const PHRASES = {
+  low: [ // 0–25 退到最底
+    '退潮不是失去，是海在收回力气。',
+    '滩涂裸露的时候，才看得见平时藏着的东西。',
+    '允许今天是干的。什么都不用长出来。',
+    '现在什么都不用做。潮水自己知道路。',
+    '低到底的那一刻，就是开始回涨的那一刻。'
+  ],
+  midlow: [ // 25–50
+    '浅水也是水。',
+    '不用急着涨。海从不为谁准时。',
+    '把注意力放回呼吸，其余的先交给洋流。',
+    '今天只要浮着就够了。',
+    '你不需要在低处解释自己为什么在低处。'
+  ],
+  mid: [ // 50–75
+    '平潮。不涨不退，海最安静的时刻。',
+    '此刻你是完整的，即使什么都没完成。',
+    '风停了，水面才照得出东西。',
+    '刚好的水位，刚好够走路。',
+    '把手放在胸口，那里也有一片海在动。'
+  ],
+  high: [ // 75–100
+    '满潮的时候别急着做决定，水会晃。',
+    '情绪很满不等于要溢出来。海有它的边界。',
+    '涨潮带来的东西，退潮会带走一部分。',
+    '很满也是一种完整。先感受它，不用处理它。',
+    '让它涨到该到的地方，然后停下来看着。'
+  ]
+};
+const LEVEL_NAMES = [
+  [0 , '干　滩'], [20, '浅　水'], [40, '半　潮'],
+  [60, '涨　潮'], [80, '满　潮']
+];
+function levelName(v){ let n='干　滩'; for(const [t,s] of LEVEL_NAMES) if(v>=t) n=s; return n; }
+function phraseFor(v){
+  const b = v<25?'low' : v<50?'midlow' : v<75?'mid' : 'high';
+  const arr = PHRASES[b];
+  // 同一天同一档，句子不会因为刷新而变
+  const n = Math.floor(Date.now() / DAY);
+  return arr[(n*31 + Math.floor(v/25)*7) % arr.length];
+}
+const BREATH_END = [
+  '你刚刚花了几分钟只做一件事。这很少见。',
+  '身体已经知道怎么回来了，它只是需要被允许。',
+  '海不会一直涨。你也不会。',
+  '记住这个节奏。它在你身上，不在手机里。'
+];
+/* 每日一句 · 第一人称肯定句（按日期固定，一天不会变） */
+const AFFIRMATIONS = [
+  '我不需要今天就把所有事情弄明白。',
+  '我允许自己慢一点。',
+  '我正在做的已经够了。',
+  '我的感觉是真的，不需要谁批准。',
+  '我可以改变主意。',
+  '我不欠任何人一个完美的版本。',
+  '我值得被温柔对待，包括被我自己。',
+  '我可以先照顾自己，再照顾别人。',
+  '我不是我的焦虑。',
+  '我在的地方就是我该在的地方。',
+  '我能承受此刻的不确定。',
+  '我不必赢下每一次对话。',
+  '我的价值不由效率决定。',
+  '我可以说不，并且不用解释。',
+  '我允许好的事情发生在我身上。',
+  '我信任自己的节奏。',
+  '有些情绪只需要被感受，不需要被解决。',
+  '我可以休息，世界不会塌。',
+  '我正在成为的样子，不需要被提前确认。',
+  '我可以带着害怕去做。',
+  '我拥有的已经很多了。',
+  '我不需要证明我在努力。',
+  '我可以放下今天没做完的事。',
+  '我的身体一直在为我工作，即使我没在意它。',
+  '我允许自己被喜欢。',
+  '我不是别人情绪的负责人。',
+  '我可以重新开始，随时。',
+  '我每天都在往前，即使看不出来。',
+  '我可以只是存在，不产出任何东西。',
+  '我值得占据空间。'
+];
+function affirmationOf(d = new Date()){
+  const n = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY);
+  return AFFIRMATIONS[((n * 7919) % AFFIRMATIONS.length + AFFIRMATIONS.length) % AFFIRMATIONS.length];
+}
+
+/* 没有 API key 时，人鱼的备用回音 */
+const MERMAID_FALLBACK = [
+  '我读了。没什么要教你的——在这底下待久了，学会的第一件事是有些东西不用解决，只要别被冲走就行。你交给我了，那就先放我这儿。',
+  '收到了。这里很暗，但暗不是坏事，暗的地方东西沉得慢。纸上有褶，你写的时候手大概在抖。我把它压在一块石头下面了。',
+  '瓶子是今天早上到的。我拆的时候有点犹豫，怕你不想被人看见。看完我想说：我也有这样的时候，只是没人给我寄瓶子。',
+  '我把它读了两遍。第二遍的时候海面上正好过了一群鱼，声音很大，我什么都没听清，但那句话还在。有些东西就是这样，吵不散。',
+  '你不用每次都写得那么清楚。我这边水压很大，字有时候会糊掉，我照样能读懂大概。你也可以对自己糊一点。',
+  '我留着。这里的东西不会腐烂，只会慢慢被珊瑚包起来，变成礁的一部分。过几年你可能都认不出它原来是什么了——那也挺好。',
+  '海面上现在是白天，光能到我这儿，很浅的一层。我举着你的纸条在那层光里看了很久。我不知道该说什么，但我确实看了很久。',
+  '好。我知道了。不用回我，也不用觉得欠我什么。瓶子往回漂的时候是顺流的，不费力。',
+  '你写的时候大概觉得没人会读。我读了。就这件事本身，我想让你知道。',
+  '这里的水温常年一样，什么都不会变得更糟，也不会更好。有时候我羡慕你们上面有四季。你现在难受，说明你还在变。'
+];
+
+const DIVE_LINES = [
+  [  8, '阳光还在你上方晃动。'],
+  [ 24, '声音开始变钝了。'],
+  [ 42, '颜色一层一层被水吃掉，先是红色。'],
+  [ 62, '这里已经没有人能找到你。这很安全。'],
+  [ 88, '你不需要为下沉用力，海会带着你。'],
+  [116, '水温稳定下来了。你的身体也是。'],
+  [146, '远处有发光的东西经过。不必看清它。'],
+  [176, '呼吸变得很长很长，像一个人在另一个房间睡着。'],
+  [198, '海底。你可以待在这里。']
+];
+
+/* =========================================================
+   海：canvas 渲染
+   ========================================================= */
+const cv = $('#ocean'), cx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W*DPR; cv.height = H*DPR;
+  cx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const O = {
+  mode : 'surface',   // surface | dive
+  level: 0.58,        // 水面在屏幕上的位置比例（越小＝水位越高）
+  target: 0.58,
+  depth: 0,           // 0–1，下潜进度
+  t: 0,
+  amp: 1,             // 浪的振幅倍数（呼吸时会放大）
+  quiet: 0, quietTarget: 0,   // 阅读页把背景压下去
+  moonP: moonPhase()
+};
+
+const snow = Array.from({length: 70}, () => ({
+  x: Math.random(), y: Math.random(), r: Math.random()*1.5+0.4,
+  s: Math.random()*0.12+0.03, a: Math.random()*0.4+0.12,
+  w: Math.random()*Math.PI*2
+}));
+
+function waveY(x, base, time){
+  return base
+    + Math.sin(x*0.0135 + time*0.7 ) * 9  * O.amp
+    + Math.sin(x*0.0062 - time*0.42) * 15 * O.amp
+    + Math.sin(x*0.0281 + time*1.05) * 3.4* O.amp;
+}
+
+function render(){
+  O.t += 0.016;
+  O.level = lerp(O.level, O.target, 0.09);
+
+  cx.clearRect(0,0,W,H);
+
+  if (O.mode === 'dive'){
+    const d = O.depth;                       // 0 → 1
+    const g = cx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, `rgb(${Math.round(lerp(12,1,d))},${Math.round(lerp(52,5,d))},${Math.round(lerp(82,13,d))})`);
+    g.addColorStop(1, `rgb(${Math.round(lerp(4,0,d))},${Math.round(lerp(14,2,d))},${Math.round(lerp(26,6,d))})`);
+    cx.fillStyle = g; cx.fillRect(0,0,W,H);
+
+    // 上方残余的光
+    const lift = (1-d);
+    if (lift > 0.02){
+      const lg = cx.createRadialGradient(W*0.5, -H*0.25, 0, W*0.5, -H*0.25, H*0.95);
+      lg.addColorStop(0, `rgba(140,220,230,${0.22*lift})`);
+      lg.addColorStop(1, 'rgba(140,220,230,0)');
+      cx.fillStyle = lg; cx.fillRect(0,0,W,H);
+    }
+    // 海雪：向上飘（因为你在下沉）
+    for (const p of snow){
+      p.y -= p.s*0.006 * (0.5 + d*1.6);
+      if (p.y < -0.03){ p.y = 1.03; p.x = Math.random(); }
+      const x = p.x*W + Math.sin(O.t*0.5 + p.w)*7;
+      cx.beginPath();
+      cx.arc(x, p.y*H, p.r, 0, 7);
+      cx.fillStyle = `rgba(190,226,232,${p.a*(0.35+lift*0.65)})`;
+      cx.fill();
+    }
+    // 深处偶尔的生物荧光
+    if (d > 0.45){
+      for (let i=0;i<4;i++){
+        const ph = O.t*0.12 + i*1.9;
+        const bx = (Math.sin(ph*0.7+i)*0.5+0.5)*W;
+        const by = ((ph*0.13+i*0.27)%1.3-0.15)*H;
+        const a = Math.max(0, Math.sin(ph)) * 0.5 * (d-0.45)/0.55;
+        if (a<=0) continue;
+        const bg = cx.createRadialGradient(bx,by,0,bx,by,26);
+        bg.addColorStop(0,`rgba(150,235,235,${a})`);
+        bg.addColorStop(1,'rgba(150,235,235,0)');
+        cx.fillStyle = bg; cx.beginPath(); cx.arc(bx,by,26,0,7); cx.fill();
+      }
+    }
+    requestAnimationFrame(render);
+    return;
+  }
+
+  /* ---- 水面模式 ---- */
+  const base = O.level * H;
+
+  // 夜空
+  const sky = cx.createLinearGradient(0,0,0,base+40);
+  sky.addColorStop(0,'#040a16'); sky.addColorStop(0.55,'#08182b'); sky.addColorStop(1,'#0d3350');
+  cx.fillStyle = sky; cx.fillRect(0,0,W,base+40);
+
+  // 月亮（在"瓶子/我的海"这类阅读页会安静下来）
+  O.quiet = lerp(O.quiet, O.quietTarget, 0.06);
+  const mA = 1 - O.quiet*0.95;
+  const mx = W*0.76, my = H*0.155, mr = 26;
+  const halo = cx.createRadialGradient(mx,my,0,mx,my,mr*5.5);
+  halo.addColorStop(0,`rgba(226,240,238,${0.20*mA})`); halo.addColorStop(1,'rgba(226,240,238,0)');
+  cx.fillStyle = halo; cx.beginPath(); cx.arc(mx,my,mr*5.5,0,7); cx.fill();
+  // 相位：亮的半边 + 一个终止线椭圆（盈时椭圆是亮的，亏到不足一半时是暗的）
+  const kk    = Math.cos(O.moonP*Math.PI*2);          //  1 新月 · -1 满月
+  const illum = (1 - kk) / 2;                          //  0 新月 ·  1 满月（真实照亮比例）
+  const waxing = O.moonP < 0.5;                        //  北半球：盈时右边亮
+  const DARK   = `rgba(210,224,222,${0.10*mA})`;
+  const LIT    = `rgba(240,246,236,${0.92*mA})`;
+  cx.fillStyle = DARK;                                  // 暗面：整个圆盘的淡影
+  cx.beginPath(); cx.arc(mx,my,mr,0,7); cx.fill();
+  cx.fillStyle = LIT;                                   // 亮面：外缘半圆 + 终止线椭圆，一笔画完
+  cx.beginPath();
+  cx.arc(mx, my, mr, -Math.PI/2, Math.PI/2, !waxing);
+  cx.ellipse(mx, my, Math.abs(kk)*mr, mr, 0, Math.PI/2, -Math.PI/2, kk > 0 ? waxing : !waxing);
+  cx.closePath(); cx.fill();
+
+  // 水体
+  cx.beginPath();
+  cx.moveTo(0,H);
+  for (let x=0; x<=W+6; x+=6){ const xx = Math.min(x,W); cx.lineTo(xx, waveY(xx, base, O.t)); }
+  cx.lineTo(W,H); cx.closePath();
+  const water = cx.createLinearGradient(0,base-30,0,H);
+  water.addColorStop(0,'#155a80'); water.addColorStop(0.28,'#0d3b5c');
+  water.addColorStop(0.7,'#071c30'); water.addColorStop(1,'#030d18');
+  cx.fillStyle = water; cx.fill();
+
+  // 月光在水面上的碎光路径
+  cx.save();
+  cx.beginPath();
+  cx.moveTo(0,H);
+  for (let x=0; x<=W+6; x+=6){ const xx = Math.min(x,W); cx.lineTo(xx, waveY(xx, base, O.t)); }
+  cx.lineTo(W,H); cx.closePath(); cx.clip();
+  const N = 64, span = H - base;
+  for (let i=0;i<N;i++){
+    const f = i/N;
+    const yy = base + Math.pow(f, 1.75) * span * 1.06 + 3;
+    if (yy > H) break;
+    const spread = 16 + Math.pow(f, 1.15) * W * 0.46;
+    const shards = (i % 2) ? 2 : 1;
+    for (let j=0;j<shards;j++){
+      const rnd = Math.sin(i*12.9898 + j*78.233) * 43758.5453;
+      const r = rnd - Math.floor(rnd);
+      const w = 4 + r*spread*0.42;
+      const wob = Math.sin(O.t*0.9 + i*0.55 + j*2.3) * spread*0.26;
+      const x = mx - spread/2 + r*spread + wob;
+      const shimmer = 0.45 + 0.55*Math.abs(Math.sin(O.t*1.15 + i*0.9 + j));
+      const a = 0.17 * (1-f) * (0.3 + illum*0.7) * shimmer * mA;
+      cx.fillStyle = `rgba(206,238,238,${a})`;
+      cx.fillRect(x, yy, w, 1.4);
+    }
+  }
+  cx.restore();
+
+  // 水面高光线
+  cx.beginPath();
+  for (let x=0; x<=W+6; x+=6){
+    const xx = Math.min(x,W), y = waveY(xx, base, O.t);
+    x===0 ? cx.moveTo(xx,y) : cx.lineTo(xx,y);
+  }
+  cx.strokeStyle = 'rgba(178,226,230,.42)'; cx.lineWidth = 1.2; cx.stroke();
+
+  // 水下海雪
+  for (const p of snow){
+    const py = base + p.y * (H-base) * 1.02;
+    if (py < base+4) continue;
+    const x = p.x*W + Math.sin(O.t*0.4 + p.w)*10;
+    cx.beginPath(); cx.arc(x, py, p.r, 0, 7);
+    cx.fillStyle = `rgba(180,220,226,${p.a*0.6})`;
+    cx.fill();
+    p.y += p.s*0.0012;
+    if (p.y > 1.02){ p.y = 0; p.x = Math.random(); }
+  }
+
+  // 漂流瓶动画
+  if (BOTTLE.anim) drawBottle(base);
+
+  requestAnimationFrame(render);
+}
+
+/* ---------- 漂流瓶的精灵 ---------- */
+const BOTTLE = { anim:false, p:0 };
+function drawBottle(base){
+  BOTTLE.p += 0.0021;
+  const p = BOTTLE.p;
+  if (p >= 1){ BOTTLE.anim = false; return; }
+  const x = lerp(W*0.5, W*0.5 + (W*0.62), Math.pow(p,1.35));
+  const sink = p < 0.72 ? 0 : Math.pow((p-0.72)/0.28, 2) * (H-base) * 0.75;
+  const y = waveY(x, base, O.t) - 6 + sink;
+  const a = p < 0.72 ? 1 : 1 - (p-0.72)/0.28;
+  cx.save();
+  cx.globalAlpha = a;
+  cx.translate(x,y);
+  cx.rotate(Math.sin(O.t*1.6)*0.22 + 0.5);
+  cx.fillStyle = 'rgba(190,232,228,.72)';
+  cx.strokeStyle = 'rgba(225,245,242,.9)'; cx.lineWidth = 1;
+  cx.beginPath();
+  cx.roundRect ? cx.roundRect(-5,-11,10,22,4) : cx.rect(-5,-11,10,22);
+  cx.fill(); cx.stroke();
+  cx.fillStyle = 'rgba(224,163,150,.9)';
+  cx.fillRect(-2.4,-15,4.8,5);
+  cx.restore();
+}
+
+render();
+
+/* =========================================================
+   页面切换
+   ========================================================= */
+const TABS = [
+  ['s-surface','海面','<path d="M2 13c3-3 5-3 8 0s5 3 8 0M2 18c3-3 5-3 8 0s5 3 8 0"/><circle cx="16" cy="5" r="2.6"/>'],
+  ['s-breath' ,'呼吸','<circle cx="10.5" cy="10.5" r="3"/><circle cx="10.5" cy="10.5" r="7.2" opacity=".55"/>'],
+  ['s-bottle' ,'瓶子','<path d="M8.5 2h4v3.2c0 1 .4 1.4 1 2.1.9 1 1.5 1.9 1.5 3.2V18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7.5c0-1.3.6-2.2 1.5-3.2.6-.7 1-1.1 1-2.1Z"/>'],
+  ['s-dive'   ,'下潜','<path d="M10.5 3v13"/><path d="M6 12l4.5 4.6L15 12"/><path d="M3 20h15"/>'],
+  ['s-mysea'  ,'我的海','<path d="M2.5 15c2.5-4 4.5-1 6.5-5s4-6 9-6"/><path d="M2.5 19h16"/>']
+];
+const tabbar = $('#tabbar');
+TABS.forEach(([id,label,path])=>{
+  const b = document.createElement('button');
+  b.innerHTML = `<svg viewBox="0 0 21 21">${path}</svg><span>${label}</span>`;
+  b.onclick = ()=>go(id);
+  b.dataset.id = id;
+  tabbar.appendChild(b);
+});
+function go(id){
+  if (DIVE.running && id !== 's-dive') stopDive();
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id===id));
+  tabbar.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.id===id));
+  O.mode = (id==='s-dive' && DIVE.running) ? 'dive' : 'surface';
+  const reading = (id==='s-bottle' || id==='s-mysea');
+  O.quietTarget = reading ? 1 : 0;
+  if (reading) O.target = 0.94;
+  if (id==='s-breath' && !BREATH.running){ O.target = 0.58; O.amp = 1; }
+  if (id==='s-surface'){ O.target = levelToScreen(todayLevel); placeReadout(); }
+  if (id==='s-dive' && !DIVE.running) O.target = 0.30;
+  if (id==='s-mysea') drawChart();
+  if (id==='s-bottle') renderReturns();
+}
+
+/* =========================================================
+   海面：潮汐打卡
+   ========================================================= */
+let todayLevel = 55;
+let locked = false;                     // 今天已记录 → 锁住，一天只记一次
+const tides = store.get('tides', {});   // { '2026-09-06': 62, ... }
+
+function levelToScreen(v){ return 1 - v/100 * 0.62 - 0.18; }  // 0.80 → 0.18
+
+function placeReadout(){
+  // 数字沉在水面正下方，跟着水位走
+  const t = levelToScreen(todayLevel);
+  $('#readout').style.top = clamp(t*100 + 7.5, 22, 60) + '%';
+}
+function paintSurface(){
+  $('#levelNum').textContent = Math.round(todayLevel);
+  $('#levelName').textContent = levelName(todayLevel);
+  O.target = levelToScreen(todayLevel);
+  placeReadout();
+}
+
+function setLocked(on){
+  locked = on;
+  const btn = $('#recordBtn');
+  btn.classList.toggle('locked', on);
+  btn.textContent = on ? '今天的水位已经记下了' : '记录今天的水位';
+  btn.disabled = on;
+  $('#unlockBtn').hidden = !on;
+  $('#dragHint').style.opacity = on ? '0' : '1';
+}
+
+// 拖动
+let dragging = false, dragMoved = 0;
+function setFromY(clientY){
+  const r = clamp((clientY / H - 0.18) / 0.62, 0, 1);
+  const v = clamp(Math.round((1-r)*100), 0, 100);
+  if (v !== todayLevel){ dragMoved++; todayLevel = v; paintSurface();
+    if (OB.waitDrag && dragMoved > 8) obDragged(); }
+}
+const surf = $('#s-surface');
+function canDrag(e){
+  if (e.target.closest('button,.card,.moonline')) return false;
+  if (typeof OB !== 'undefined' && OB.waitDrag) return true;   // 引导里这一步必须能拖
+  return !locked;
+}
+surf.addEventListener('touchstart', e=>{ if(!canDrag(e)) return;
+  dragging=true; setFromY(e.touches[0].clientY); }, {passive:true});
+surf.addEventListener('touchmove',  e=>{ if(dragging){ setFromY(e.touches[0].clientY); } }, {passive:true});
+surf.addEventListener('touchend',   ()=> dragging=false);
+surf.addEventListener('mousedown',  e=>{ if(!canDrag(e)) return;
+  dragging=true; setFromY(e.clientY); });
+window.addEventListener('mousemove',e=>{ if(dragging) setFromY(e.clientY); });
+window.addEventListener('mouseup',  ()=> dragging=false);
+
+$('#recordBtn').onclick = ()=>{
+  if (locked) return;
+  tides[todayKey()] = todayLevel;
+  store.set('tides', tides);
+  $('#phrase').textContent = phraseFor(todayLevel);
+  setLocked(true);
+  drawChart();
+};
+$('#unlockBtn').onclick = ()=>{ setLocked(false); $('#phrase').textContent = ''; };
+
+// 月相：点开才看仪式提示
+$('#moonBtn').onclick = ()=>{
+  const r = $('#ritual');
+  r.hidden = !r.hidden;
+  $('#moonBtn').classList.toggle('open', !r.hidden);
+};
+
+function initSurface(){
+  const d = new Date();
+  const wk = ['日','一','二','三','四','五','六'][d.getDay()];
+  $('#todayLabel').textContent = `${d.getMonth()+1} 月 ${d.getDate()} 日 · 星期${wk}`;
+  const p = moonPhase(d), name = moonNameOf(p);
+  O.moonP = p;
+  $('#moonName').textContent = name;
+  const rt = MOON_RITUAL[name];
+  $('#ritual').innerHTML = rt
+    ? `<div class="ritual-tag">${rt.en}　·　${rt.key}</div><div>${rt.do}</div>` : '';
+  drawMoonGlyph($('#moonGlyph'), p);
+  $('#affirm').textContent = affirmationOf(d);
+
+  const saved = tides[todayKey()];
+  if (saved !== undefined){
+    todayLevel = saved;
+    $('#phrase').textContent = phraseFor(saved);
+    setLocked(true);
+  } else {
+    $('#phrase').textContent = '';
+    setLocked(false);
+  }
+  paintSurface();
+}
+
+/* =========================================================
+   呼吸
+   ========================================================= */
+const PATTERNS = [
+  {name:'平　潮', seq:[['吸',4],['呼',4]],                 desc:'4 - 4'},
+  {name:'长　浪', seq:[['吸',5],['呼',5]],                 desc:'5 - 5'},
+  {name:'深　潮', seq:[['吸',4],['屏',7],['呼',8]],        desc:'4 - 7 - 8 · 助眠'}
+];
+const BREATH = { running:false, idx:0, step:0, t0:0, cycles:0, raf:0 };
+let pattern = 0;
+
+const chips = $('#breathChips');
+PATTERNS.forEach((p,i)=>{
+  const c = document.createElement('div');
+  c.className = 'chip' + (i===0?' on':'');
+  c.innerHTML = `${p.name} <span style="opacity:.55;font-size:11px">${p.desc}</span>`;
+  c.onclick = ()=>{ if(BREATH.running) return;
+    pattern = i; chips.querySelectorAll('.chip').forEach((x,j)=>x.classList.toggle('on', j===i)); };
+  chips.appendChild(c);
+});
+
+$('#breathBtn').onclick = ()=> BREATH.running ? stopBreath() : startBreath();
+
+/* 浪声跟着呼吸走：吸气浪涌起（变亮变响），呼气浪退回（变闷变轻） */
+function applyBreathStep(word, dur){
+  if (!A) return;
+  if (word === '吸'){ ramp(A.lp.frequency, 1150, dur*0.92); ramp(A.master.gain, 0.30, dur*0.92); }
+  else if (word === '呼'){ ramp(A.lp.frequency, 240, dur*0.95); ramp(A.master.gain, 0.05, dur*0.95); }
+  else { ramp(A.lp.frequency, 430, 0.8); ramp(A.master.gain, 0.12, 0.8); }   // 屏息：低而稳
+}
+function startBreath(){
+  BREATH.running = true; BREATH.step = 0; BREATH.cycles = 0; BREATH.t0 = performance.now();
+  $('#breathBtn').textContent = '结束';
+  chips.style.transition = 'opacity 1s'; chips.style.opacity = '0'; chips.style.pointerEvents = 'none';
+  if (buildAudio()){
+    ramp(A.lfoGain.gain, 0, 0.1); ramp(A.swellGain.gain, 0, 0.1);
+    ramp(A.master.gain, 0.05, 1.2);
+  }
+  const [w0, d0] = PATTERNS[pattern].seq[0];
+  applyBreathStep(w0, d0);
+  tickBreath();
+}
+function stopBreath(){
+  BREATH.running = false; cancelAnimationFrame(BREATH.raf);
+  stopAudio(2.0);
+  $('#breathBtn').textContent = '开始';
+  chips.style.opacity = '1'; chips.style.pointerEvents = 'auto';
+  O.target = levelToScreen(todayLevel); O.amp = 1;
+  $('#breathWord').textContent = BREATH.cycles >= 3 ? '好了' : '准备';
+  if (BREATH.cycles >= 3){
+    $('#breathCount').textContent = BREATH_END[Math.floor(Math.random()*BREATH_END.length)];
+  } else {
+    $('#breathCount').textContent = '选一种节律，跟着海面起落';
+  }
+}
+function tickBreath(){
+  if (!BREATH.running) return;
+  const seq = PATTERNS[pattern].seq;
+  const [word, dur] = seq[BREATH.step];
+  const el = (performance.now() - BREATH.t0) / 1000;
+  const k = clamp(el/dur, 0, 1);
+
+  $('#breathWord').textContent = word;
+  $('#breathCount').textContent = `第 ${BREATH.cycles+1} 轮 · ${Math.ceil(dur-el)}`;
+
+  // 海面随呼吸涨落：吸＝涨（level 变小）
+  const hi = 0.30, lo = 0.74;
+  const ease = t => t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+  let target;
+  if (word==='吸') target = lerp(lo, hi, ease(k));
+  else if (word==='呼') target = lerp(hi, lo, ease(k));
+  else target = hi;
+  O.target = target;
+  O.amp = word==='屏' ? 0.35 : 1.5;
+
+  if (el >= dur){
+    BREATH.step = (BREATH.step+1) % seq.length;
+    if (BREATH.step === 0) BREATH.cycles++;
+    BREATH.t0 = performance.now();
+    if (BREATH.cycles >= 8){ stopBreath(); return; }
+    const [w2, d2] = seq[BREATH.step];
+    applyBreathStep(w2, d2);
+  }
+  BREATH.raf = requestAnimationFrame(tickBreath);
+}
+
+/* =========================================================
+   漂流瓶
+   ========================================================= */
+const RETURN_MIN = [3, 8];      // 随机 3–8 分钟后漂回
+function bottles(){ return store.get('bottles', []); }
+function saveBottles(l){ store.set('bottles', l); }
+function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ---------- 海里那个人 ---------- */
+const MERMAID_SYSTEM =
+`你是一条住在深海里的人鱼。你不是神，不是心理咨询师，也不是助手——你是一个平等的、也有自己心事的对象。
+有人把一张纸条封进玻璃瓶扔进海里，瓶子漂到了你这里。你读完了，现在写一段话放回瓶子里让它漂回岸边。
+规则：
+- 用"我"和"你"说话，像一个人对另一个人。可以说"我也……"。
+- 不要给建议清单，不要说教，不要评价对方。不要出现"你应该""建议你""其实""加油""相信自己"。
+- 不要复述对方写的内容，也不要总结它。
+- 不要用感叹号。不要提到你是 AI 或模型。
+- 可以顺手提到你身边的东西：水温、光、洋流、沉船、珊瑚、声音传得慢。但不要每次都提，也不要堆砌。
+- 60 到 120 个字。中文。
+- 只输出这段话本身，不要加引号或任何说明。`;
+
+function pickFallback(text){
+  let h = 0;
+  for (const c of text) h = (h*31 + c.charCodeAt(0)) >>> 0;
+  return MERMAID_FALLBACK[(h + (Date.now()/60000|0)) % MERMAID_FALLBACK.length];
+}
+async function askMermaid(text){
+  const key = String(store.get('dsKey','') || '').trim();
+  if (!key) return { reply: pickFallback(text), src: 'local' };
+  try{
+    const r = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+key },
+      body: JSON.stringify({
+        model: 'deepseek-chat', temperature: 1.2, max_tokens: 400,
+        messages: [ {role:'system', content: MERMAID_SYSTEM},
+                    {role:'user',   content: '纸条上写着：「'+text+'」'} ]
+      })
+    });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    const out = ((j.choices && j.choices[0] && j.choices[0].message.content) || '').trim();
+    if (!out) throw new Error('空回复');
+    return { reply: out, src: 'ai' };
+  }catch(e){
+    return { reply: pickFallback(text), src: 'local', err: String(e && e.message || e) };
+  }
+}
+
+$('#sealBtn').onclick = ()=>{
+  const text = $('#bottleText').value.trim();
+  if (!text){ $('#bottleText').focus(); return; }
+  $('#bottleText').blur();
+  const mins = RETURN_MIN[0] + Math.random()*(RETURN_MIN[1]-RETURN_MIN[0]);
+  const b = { id: Date.now(), text, sentAt: Date.now(),
+              returnAt: Date.now() + mins*60000, read: false, reply: null, src: null };
+  const list = bottles(); list.push(b); saveBottles(list);
+  $('#bottleText').value = '';
+
+  playLaunch(mins);
+  scheduleNotify();
+  // 回音在瓶子还在路上的时候就写好，漂回来时直接能读
+  askMermaid(text).then(res=>{
+    const all = bottles(), it = all.find(x => x.id === b.id);
+    if (it){ it.reply = res.reply; it.src = res.src; saveBottles(all); }
+  });
+};
+
+/* ---------- 投海：一个独立的场景，不是蒙版 ---------- */
+function playLaunch(mins){
+  const el = $('#launch'), t = $('#launchText'), s = $('#launchSub');
+  document.body.classList.add('launching');
+  el.classList.add('on');
+  O.mode = 'surface'; O.quietTarget = 0; O.target = 0.42; O.amp = 1;
+  BOTTLE.anim = true; BOTTLE.p = 0;
+
+  const beats = [
+    [   0, '瓶子已经离岸', '看着它走'],
+    [3400, '它在往深处去', ''],
+    [6600, '有人会读到',   Math.round(mins) + ' 分钟后漂回来']
+  ];
+  beats.forEach(([ms, a, b2], i)=>{
+    if (i === 0){ t.textContent = a; s.textContent = b2; return; }
+    setTimeout(()=>{
+      t.style.opacity = 0; s.style.opacity = 0;
+      setTimeout(()=>{ t.textContent = a; s.textContent = b2;
+                       t.style.opacity = 1; s.style.opacity = 1; }, 900);
+    }, ms);
+  });
+  setTimeout(()=>{
+    el.classList.remove('on');
+    document.body.classList.remove('launching');
+    go('s-bottle'); renderReturns();
+  }, 9800);
+}
+
+function renderReturns(){
+  const list = bottles(), now = Date.now();
+  const note = $('#returnNote');
+  const back = list.filter(b => !b.read && now >= b.returnAt);
+
+  if (!back.length){
+    // 还在路上的瓶子：显示倒计时
+    const onWay = list.filter(b => !b.read && now < b.returnAt)
+                      .sort((a,b)=> a.returnAt - b.returnAt)[0];
+    if (!onWay){ note.hidden = true; return; }
+    const mins = Math.max(1, Math.ceil((onWay.returnAt - now)/60000));
+    note.hidden = false;
+    note.className = 'card waiting';
+    note.innerHTML =
+      `<div class="eyebrow" style="margin-bottom:8px">有 一 只 瓶 子 在 路 上</div>
+       <div class="muted">大约还有 ${mins} 分钟漂回来。可以先去别处待着。</div>`;
+    return;
+  }
+
+  const b = back[0];
+  note.hidden = false;
+  note.className = 'card';
+  note.innerHTML =
+    `<div class="eyebrow" style="margin-bottom:10px">有一只瓶子漂回来了</div>
+     <div class="muted" style="font-size:12.5px">你写的：${escapeHtml(b.text)}</div>` +
+    (b.reply
+      ? `<div class="who">海 里 那 个 人 的 回 音</div>
+         <div class="reply">${escapeHtml(b.reply)}</div>`
+      : `<div class="muted" style="margin-top:12px">回音还在路上，等一下再来看。</div>`) +
+    `<button class="btn ghost" style="width:100%;padding:9px;margin-top:16px" id="bkeep">收下</button>`;
+  $('#bkeep').onclick = ()=>{
+    const all = bottles(), it = all.find(x => x.id === b.id);
+    if (it) it.read = true;
+    saveBottles(all);
+    setBadge(); renderReturns(); renderBottleList();
+  };
+}
+
+/* =========================================================
+   提醒：瓶子漂回来时弹一条通知 + 主屏幕图标角标
+   iOS 上必须先"添加到主屏幕"（16.4+）；App 被系统完全清掉时不会响
+   ========================================================= */
+const NOTIF = { timer: null };
+function notifyState(){
+  if (!('Notification' in window)) return 'unsupported';
+  return Notification.permission;                 // default / granted / denied
+}
+async function askNotify(){
+  if (notifyState() === 'unsupported') return 'unsupported';
+  try { return await Notification.requestPermission(); } catch(e){ return 'denied'; }
+}
+function setBadge(){
+  try{
+    const n = bottles().filter(b => !b.read && Date.now() >= b.returnAt).length;
+    if (navigator.setAppBadge) n ? navigator.setAppBadge(n) : navigator.clearAppBadge();
+  }catch(e){}
+}
+async function notifyBottle(){
+  setBadge();
+  if (notifyState() !== 'granted') return;
+  const opts = { body:'去瓶子那一页看看回音。', icon:'icons/icon-192.png',
+                 badge:'icons/icon-192.png', tag:'tide-bottle', renotify:true };
+  try{
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    if (reg && reg.showNotification) await reg.showNotification('有一只瓶子漂回来了', opts);
+    else new Notification('有一只瓶子漂回来了', opts);
+  }catch(e){}
+}
+function scheduleNotify(){
+  clearTimeout(NOTIF.timer);
+  const next = bottles().filter(b => !b.read && Date.now() < b.returnAt)
+                        .sort((a,b)=> a.returnAt - b.returnAt)[0];
+  if (!next) return;
+  NOTIF.timer = setTimeout(()=>{
+    notifyBottle(); renderReturns(); renderBottleList(); scheduleNotify();
+  }, Math.max(400, next.returnAt - Date.now()));
+}
+function refreshNotifyUI(){
+  const s = notifyState(), btn = $('#notifyBtn');
+  if (!btn) return;
+  btn.textContent = s === 'granted' ? '提醒已打开'
+                  : s === 'denied'  ? '提醒被系统拒绝了'
+                  : s === 'unsupported' ? '这个浏览器不支持提醒'
+                  : '打开瓶子漂回的提醒';
+  btn.disabled = (s !== 'default');
+}
+
+/* =========================================================
+   下潜
+   ========================================================= */
+const DIVE = { running:false, t0:0, total:30*60*1000, raf:0, lineIdx:-1 };
+const DIVE_MINS = [15,30,45];
+let diveMin = 30;
+
+const dchips = $('#diveChips');
+DIVE_MINS.forEach((m,i)=>{
+  const c = document.createElement('div');
+  c.className = 'chip' + (m===30?' on':'');
+  c.textContent = m + ' 分钟';
+  c.onclick = ()=>{ if(DIVE.running) return; diveMin = m;
+    dchips.querySelectorAll('.chip').forEach((x,j)=>x.classList.toggle('on', DIVE_MINS[j]===m)); };
+  dchips.appendChild(c);
+});
+$('#diveBtn').onclick = ()=> DIVE.running ? stopDive() : startDive();
+
+/* =========================================================
+   海浪声：粉噪 → 高通 → 低通 → 音量
+   下潜用慢 LFO 自己涌；呼吸时由呼吸节律直接推滤波和音量
+   ========================================================= */
+let AC = null, A = null;
+function buildAudio(){
+  if (A) return A;
+  try{
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const len = AC.sampleRate * 4;
+    const buf = AC.createBuffer(1, len, AC.sampleRate);
+    const ch = buf.getChannelData(0);
+    let last = 0;
+    for (let i=0;i<len;i++){                      // 粉噪近似，比白噪柔和
+      const white = Math.random()*2-1;
+      last = (last + 0.02*white) / 1.02;
+      ch[i] = last * 3.2;
+    }
+    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+    const hp = AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 90;
+    const lp = AC.createBiquadFilter(); lp.type='lowpass';  lp.frequency.value = 420; lp.Q.value = 0.7;
+
+    const lfo = AC.createOscillator();  lfo.frequency.value = 0.085;   // ~12 秒一次涌浪
+    const lfoGain = AC.createGain();    lfoGain.gain.value = 0;
+    lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
+
+    const swell = AC.createOscillator(); swell.frequency.value = 0.085;
+    const swellGain = AC.createGain();   swellGain.gain.value = 0;
+    const master = AC.createGain();      master.gain.value = 0.0001;
+    swell.connect(swellGain); swellGain.connect(master.gain);
+
+    src.connect(hp); hp.connect(lp); lp.connect(master); master.connect(AC.destination);
+    src.start(); lfo.start(); swell.start();
+    A = { src, lp, master, lfoGain, swellGain };
+  }catch(e){ A = null; }
+  return A;
+}
+function ramp(param, value, seconds){
+  if (!A) return;
+  try{
+    const t = AC.currentTime;
+    param.cancelScheduledValues(t);
+    param.setValueAtTime(param.value, t);
+    param.linearRampToValueAtTime(value, t + Math.max(0.02, seconds));
+  }catch(e){}
+}
+function stopAudio(fade = 1.2){
+  if (!A) return;
+  const n = A; A = null;
+  try{
+    const t = AC.currentTime;
+    n.master.gain.cancelScheduledValues(t);
+    n.master.gain.setValueAtTime(n.master.gain.value, t);
+    n.master.gain.linearRampToValueAtTime(0.0001, t + fade);
+    setTimeout(()=>{ try{ n.src.stop(); }catch(e){} }, fade*1000 + 200);
+  }catch(e){}
+}
+
+function startDive(){
+  DIVE.running = true; DIVE.t0 = performance.now(); DIVE.fading = false;
+  DIVE.total = diveMin*60*1000; DIVE.lineIdx = -1;
+  document.body.classList.add('diving');
+  O.mode = 'dive'; O.depth = 0;
+  $('#diveBtn').textContent = '上浮 · 结束';
+  $('#diveCtl').style.opacity = '.28';
+  dchips.style.pointerEvents = 'none';
+  if (buildAudio()){                     // 涌浪自己来回
+    ramp(A.lfoGain.gain,   330,  4);
+    ramp(A.swellGain.gain, 0.10, 4);
+    ramp(A.lp.frequency,   520,  4);
+    ramp(A.master.gain,    0.26, 6);
+  }
+  tickDive();
+  const rec = store.get('dives', []); rec.push({at:Date.now(), min:diveMin}); store.set('dives', rec);
+}
+function stopDive(){
+  DIVE.running = false; cancelAnimationFrame(DIVE.raf);
+  document.body.classList.remove('diving');
+  O.mode = 'surface'; O.target = levelToScreen(todayLevel);
+  $('#diveBtn').textContent = '开始下潜';
+  $('#diveCtl').style.opacity = '1';
+  dchips.style.pointerEvents = 'auto';
+  $('#depthNum').innerHTML = '0<small>m</small>';
+  $('#diveLine').textContent = '水面还在你上方。';
+  stopAudio();
+}
+function tickDive(){
+  if (!DIVE.running) return;
+  const k = clamp((performance.now()-DIVE.t0)/DIVE.total, 0, 1);
+  O.depth = k;
+  const m = Math.round(k*200);
+  $('#depthNum').innerHTML = m + '<small>m</small>';
+
+  for (let i=DIVE_LINES.length-1; i>=0; i--){
+    if (m >= DIVE_LINES[i][0]){
+      if (DIVE.lineIdx !== i){
+        DIVE.lineIdx = i;
+        const el = $('#diveLine');
+        el.style.opacity = 0;
+        setTimeout(()=>{ el.textContent = DIVE_LINES[i][1]; el.style.opacity = 1; }, 1400);
+      }
+      break;
+    }
+  }
+  if (k > 0.82 && A && !DIVE.fading){                    // 最后 18% 慢慢没入无声
+    DIVE.fading = true;
+    ramp(A.master.gain, 0.0001, DIVE.total*0.18/1000);
+    ramp(A.lp.frequency, 180,   DIVE.total*0.18/1000);
+  }
+  if (k >= 1){ DIVE.running = false; DIVE.fading = false; stopAudio(); return; }
+  DIVE.raf = requestAnimationFrame(tickDive);
+}
+
+/* =========================================================
+   我的海
+   ========================================================= */
+function drawChart(){
+  const c = $('#tideChart'), g = c.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio||1,2);
+  const w = c.clientWidth, h = 170;
+  c.width = w*dpr; c.height = h*dpr; g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+
+  const N = 30, pts = [];
+  const now = new Date();
+  for (let i=N-1;i>=0;i--){
+    const d = new Date(now.getTime() - i*DAY);
+    pts.push({ k: todayKey(d), v: tides[todayKey(d)] });
+  }
+  $('#chartFrom').textContent = pts[0].k.slice(5).replace('-','/');
+  $('#chartTo').textContent   = pts[N-1].k.slice(5).replace('-','/');
+
+  const has = pts.filter(p=>p.v!==undefined);
+  if (!has.length){
+    g.fillStyle='rgba(233,240,246,.3)'; g.font='13px -apple-system,sans-serif';
+    g.textAlign='center'; g.fillText('还没有记录。去海面拖一下水位。', w/2, h/2);
+    return;
+  }
+
+  // 网格
+  g.strokeStyle='rgba(160,205,220,.09)'; g.lineWidth=1;
+  [0.25,0.5,0.75].forEach(f=>{ g.beginPath(); g.moveTo(0,h*f); g.lineTo(w,h*f); g.stroke(); });
+
+  // 空缺日线性插值，画成连续的潮汐线
+  const known = pts.map((p,i)=> p.v===undefined ? null : i).filter(i=>i!==null);
+  const vals30 = pts.map((p,i)=>{
+    if (p.v !== undefined) return p.v;
+    const before = known.filter(k=>k<i).pop();
+    const after  = known.find(k=>k>i);
+    if (before===undefined) return pts[after].v;
+    if (after===undefined)  return pts[before].v;
+    return lerp(pts[before].v, pts[after].v, (i-before)/(after-before));
+  });
+  // 轻微平滑，让它像潮汐而不是股价
+  const sm = vals30.map((v,i)=>{
+    const a = vals30[i-1] ?? v, b = vals30[i+1] ?? v;
+    return (a + v*2 + b) / 4;
+  });
+  const ys = sm.map(v => h - 12 - (v/100)*(h-30));
+  const xs = pts.map((_,i)=> (i/(N-1))*w );
+
+  g.beginPath(); g.moveTo(xs[0], ys[0]);
+  for (let i=1;i<N;i++){
+    const cxm = (xs[i-1]+xs[i])/2;
+    g.bezierCurveTo(cxm, ys[i-1], cxm, ys[i], xs[i], ys[i]);
+  }
+  g.strokeStyle='rgba(178,226,230,.8)'; g.lineWidth=1.6; g.stroke();
+
+  g.lineTo(w,h); g.lineTo(0,h); g.closePath();
+  const fill = g.createLinearGradient(0,0,0,h);
+  fill.addColorStop(0,'rgba(28,128,168,.62)'); fill.addColorStop(0.6,'rgba(14,66,100,.42)');
+  fill.addColorStop(1,'rgba(6,24,42,.10)');
+  g.fillStyle = fill; g.fill();
+
+  // 有记录的日子点一下
+  pts.forEach((p,i)=>{ if(p.v===undefined) return;
+    g.beginPath(); g.arc(xs[i], ys[i], 2.6, 0, 7);
+    g.fillStyle='rgba(226,246,246,.9)'; g.fill(); });
+
+  if (has.length < 3){
+    g.fillStyle='rgba(233,240,246,.35)'; g.font='12px -apple-system,sans-serif';
+    g.textAlign='center'; g.fillText('再记几天，潮汐才看得出形状', w/2, h-6);
+  }
+
+  // 统计
+  const vals = has.map(p=>p.v);
+  const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+  const dives = store.get('dives', []).filter(d => Date.now()-d.at < 30*DAY).length;
+  $('#statRow').innerHTML =
+    `<div class="card"><b>${has.length}</b><span>记 录 天 数</span></div>
+     <div class="card"><b>${avg}</b><span>平 均 水 位</span></div>
+     <div class="card"><b>${dives}</b><span>下 潜 次 数</span></div>`;
+  renderBottleList();
+}
+
+const openBottles = new Set();
+function renderBottleList(){
+  const list = bottles().slice().reverse();
+  const el = $('#bottleList');
+  if (!list.length){ el.innerHTML = '<div class="muted" style="padding:14px 0">还没有扔出去的瓶子。</div>'; return; }
+  const icon = '<svg viewBox="0 0 21 21"><path d="M8.5 2h4v3.2c0 1 .4 1.4 1 2.1.9 1 1.5 1.9 1.5 3.2V18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7.5c0-1.3.6-2.2 1.5-3.2.6-.7 1-1.1 1-2.1Z"/></svg>';
+  el.innerHTML = list.map(b=>{
+    const back = Date.now() >= b.returnAt;
+    const d = new Date(b.sentAt);
+    const when = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if (!back){
+      const mins = Math.max(1, Math.ceil((b.returnAt - Date.now())/60000));
+      return `<div class="bottleItem" data-id="${b.id}" data-open="0">${icon}<div>
+        <div class="meta">${when} 投出 · 还有 ${mins} 分钟漂回</div></div></div>`;
+    }
+    const open = openBottles.has(b.id);
+    const body = open
+      ? `<div class="body">${escapeHtml(b.text)}</div>` +
+        (b.reply ? `<div class="who">海 里 那 个 人 的 回 音</div>
+                    <div class="reply">${escapeHtml(b.reply)}</div>` : '')
+      : '';
+    return `<div class="bottleItem back" data-id="${b.id}">${icon}<div>
+      <div class="meta">${when} · 已漂回${b.read?'':' · 未读'}${open?'':' · 点开看'}</div>
+      ${body}</div></div>`;
+  }).join('');
+  el.querySelectorAll('.bottleItem.back').forEach(node=>{
+    node.onclick = ()=>{
+      const id = Number(node.dataset.id);
+      openBottles.has(id) ? openBottles.delete(id) : openBottles.add(id);
+      const all = bottles(), it = all.find(x=>x.id===id);
+      if (it && !it.read){ it.read = true; saveBottles(all); renderReturns(); }
+      renderBottleList();
+    };
+  });
+}
+
+/* ---------- 设置：DeepSeek key ---------- */
+function refreshKeyUI(){
+  const has = !!String(store.get('dsKey','')||'').trim();
+  $('#bottleHint').textContent = has
+    ? '已接上海里那个人，回音由 DeepSeek 生成'
+    : '还没填 API key，会用内置的回音（我的海 → 设置）';
+}
+$('#keySave').onclick = ()=>{
+  store.set('dsKey', $('#keyInput').value.trim());
+  $('#keyMsg').textContent = $('#keyInput').value.trim() ? '已保存在这台设备上。' : '已清空，之后用内置回音。';
+  refreshKeyUI();
+};
+$('#keyTest').onclick = async ()=>{
+  const key = $('#keyInput').value.trim() || String(store.get('dsKey','')||'').trim();
+  if (!key){ $('#keyMsg').textContent = '先填一个 key。'; return; }
+  $('#keyMsg').textContent = '正在试……';
+  try{
+    const r = await fetch('https://api.deepseek.com/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body: JSON.stringify({ model:'deepseek-chat', max_tokens:5,
+        messages:[{role:'user', content:'说"好"'}] })
+    });
+    $('#keyMsg').textContent = r.ok ? '通了。瓶子会带真的回音回来。'
+                                    : '接口拒绝了：HTTP ' + r.status + '（key 不对或余额不足）';
+  }catch(e){
+    $('#keyMsg').textContent = '连不上：' + (e && e.message || e) +
+      '。多半是浏览器的跨域限制，需要加一个中转接口——把这句话告诉 Claude 就行。';
+  }
+};
+
+/* =========================================================
+   新手引导
+   ========================================================= */
+const OB = { i: 0, waitDrag: false };
+const OB_STEPS = [
+  { t:'这是一片海',
+    x:'整个 App 只有这一片海。你在哪一页，只是这片海的哪个深度。' },
+  { t:'你的情绪就是水位',
+    x:'上下拖动海面，把它放到今天的高度。低不是坏事——退潮只是海在收力气。',
+    drag:true },
+  { t:'难受了就来听浪',
+    x:'呼吸那一页，浪涨是吸气，浪退是呼气，跟着它就行。睡不着的话去下潜，从水面一路沉到两百米，屏幕会自己暗下去。' },
+  { t:'说不出口的写进瓶子',
+    x:'封上扔进海里，你就看不到它了。过一会儿它会漂回来，带着海里那个人的回音。' }
+];
+const obDots = $('#obDots');
+OB_STEPS.forEach(()=> obDots.appendChild(document.createElement('i')));
+
+function paintOb(){
+  const s = OB_STEPS[OB.i];
+  const T = $('#obTitle'), X = $('#obText');
+  T.style.opacity = 0; X.style.opacity = 0;
+  setTimeout(()=>{ T.textContent = s.t; X.textContent = s.x;
+                   T.style.opacity = 1; X.style.opacity = 1; }, 260);
+  obDots.querySelectorAll('i').forEach((d,j)=> d.classList.toggle('on', j===OB.i));
+  const pass = !!s.drag;
+  $('#onboard').classList.toggle('pass', pass);
+  document.body.classList.toggle('obdrag', pass);
+  OB.waitDrag = pass;
+  dragMoved = 0;
+  $('#obNext').textContent = pass ? '↕　试　着　拖　一　下'
+                 : (OB.i === OB_STEPS.length-1 ? '开始' : '往下');
+  $('#obSkip').hidden = pass || OB.i === OB_STEPS.length-1;
+}
+function obDragged(){
+  if (!OB.waitDrag) return;
+  OB.waitDrag = false;
+  setTimeout(()=>{ OB.i++; paintOb(); }, 700);
+}
+function startOnboard(){
+  OB.i = 0;
+  $('#onboard').classList.add('on');
+  paintOb();
+}
+function endOnboard(){
+  $('#onboard').classList.remove('on','pass');
+  document.body.classList.remove('obdrag');
+  OB.waitDrag = false;
+  store.set('onboarded', true);
+}
+$('#obNext').onclick = ()=>{
+  if (OB.waitDrag) return;                 // 这一步要先拖一下
+  if (OB.i >= OB_STEPS.length-1){ endOnboard(); return; }
+  OB.i++; paintOb();
+};
+$('#obSkip').onclick = endOnboard;
+
+$('#notifyBtn').onclick = async ()=>{
+  await askNotify();
+  refreshNotifyUI();
+  if (notifyState() === 'granted'){ setBadge(); scheduleNotify(); }
+};
+
+/* ---------- 启动 ---------- */
+initSurface();
+drawChart();
+refreshKeyUI();
+refreshNotifyUI();
+renderReturns();
+setBadge();
+scheduleNotify();
+$('#keyInput').value = String(store.get('dsKey','') || '');
+go('s-surface');
+if (!store.get('onboarded', false)) setTimeout(startOnboard, 500);
+
+// 瓶子可能在你开着 App 的时候漂回来
+setInterval(()=>{
+  if ($('#s-bottle').classList.contains('on')) renderReturns();
+  if ($('#s-mysea').classList.contains('on'))  renderBottleList();
+}, 15000);
+
+// 从后台回来时补一次：可能在锁屏期间漂到了
+document.addEventListener('visibilitychange', ()=>{
+  if (document.hidden) return;
+  setBadge(); renderReturns(); renderBottleList(); scheduleNotify();
+});
+window.addEventListener('resize', ()=>{ if($('#s-mysea').classList.contains('on')) drawChart(); });
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
